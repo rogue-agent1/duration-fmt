@@ -1,45 +1,64 @@
 #!/usr/bin/env python3
-"""duration_fmt - Parse and format human-readable durations (1h30m, 2d5h, etc)."""
-import sys, re
-
-UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+"""Duration parser and formatter."""
+import re
 
 def parse_duration(s):
+    s = s.strip()
+    # ISO 8601: P[nY][nM][nD][T[nH][nM][nS]]
+    m = re.match(r'P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$', s)
+    if m:
+        years, months, days = int(m.group(1) or 0), int(m.group(2) or 0), int(m.group(3) or 0)
+        hours, mins, secs = int(m.group(4) or 0), int(m.group(5) or 0), float(m.group(6) or 0)
+        total = ((years*365 + months*30 + days) * 86400 + hours*3600 + mins*60 + secs)
+        return total
+    # Human: 1h30m, 2d, 45s, etc.
     total = 0
-    for match in re.finditer(r"(\d+\.?\d*)\s*([smhdw])", s.lower()):
-        val, unit = float(match.group(1)), match.group(2)
-        total += val * UNITS[unit]
-    if total == 0:
-        try: return float(s)
-        except: pass
-    return int(total) if total == int(total) else total
+    for val, unit in re.findall(r'(\d+(?:\.\d+)?)\s*(ms|d|h|m|s)', s.lower()):
+        val = float(val)
+        if unit == 'd': total += val * 86400
+        elif unit == 'h': total += val * 3600
+        elif unit == 'm': total += val * 60
+        elif unit == 's': total += val
+        elif unit == 'ms': total += val / 1000
+    return total
 
-def format_duration(seconds, short=True):
-    if seconds < 0: return "-" + format_duration(-seconds, short)
+def format_duration(seconds, style="human"):
+    if style == "iso":
+        parts = []
+        d = int(seconds // 86400); seconds %= 86400
+        h = int(seconds // 3600); seconds %= 3600
+        m = int(seconds // 60); s = seconds % 60
+        date_part = f"{'%dD' % d if d else ''}"
+        time_part = f"{'%dH' % h if h else ''}{'%dM' % m if m else ''}{'%gS' % s if s else ''}"
+        return f"P{date_part}{'T' + time_part if time_part else ''}" or "PT0S"
+    # Human
     parts = []
-    for unit, secs in [("w",604800),("d",86400),("h",3600),("m",60),("s",1)]:
-        if seconds >= secs:
-            count = int(seconds // secs)
-            seconds -= count * secs
-            if short:
-                parts.append(f"{count}{unit}")
-            else:
-                name = {"w":"week","d":"day","h":"hour","m":"minute","s":"second"}[unit]
-                parts.append(f"{count} {name}{'s' if count!=1 else ''}")
-    return " ".join(parts) if parts else ("0s" if short else "0 seconds")
-
-def test():
-    assert parse_duration("1h30m") == 5400
-    assert parse_duration("2d") == 172800
-    assert parse_duration("1w2d3h") == 788400
-    assert parse_duration("90s") == 90
-    assert format_duration(5400) == "1h 30m"
-    assert format_duration(90) == "1m 30s"
-    assert format_duration(0) == "0s"
-    assert format_duration(86400) == "1d"
-    assert "day" in format_duration(86400, short=False)
-    assert format_duration(3661) == "1h 1m 1s"
-    print("duration_fmt: all tests passed")
+    d = int(seconds // 86400); seconds %= 86400
+    h = int(seconds // 3600); seconds %= 3600
+    m = int(seconds // 60); s = int(seconds % 60)
+    if d: parts.append(f"{d}d")
+    if h: parts.append(f"{h}h")
+    if m: parts.append(f"{m}m")
+    if s or not parts: parts.append(f"{s}s")
+    return " ".join(parts)
 
 if __name__ == "__main__":
-    test() if "--test" in sys.argv else print("Usage: duration_fmt.py --test")
+    import sys
+    s = " ".join(sys.argv[1:]) or "1h30m"
+    secs = parse_duration(s)
+    print(f"Parsed: {secs}s = {format_duration(secs)}")
+
+def test():
+    assert parse_duration("PT1H30M") == 5400
+    assert parse_duration("P1D") == 86400
+    assert parse_duration("P1DT2H3M4S") == 93784
+    assert parse_duration("1h30m") == 5400
+    assert parse_duration("2d 5h") == 2*86400 + 5*3600
+    assert parse_duration("45s") == 45
+    assert parse_duration("500ms") == 0.5
+    assert format_duration(3661) == "1h 1m 1s"
+    assert format_duration(86400) == "1d"
+    assert format_duration(0) == "0s"
+    iso = format_duration(3661, "iso")
+    assert "1H" in iso and "1M" in iso and "1S" in iso
+    print("  duration_fmt: ALL TESTS PASSED")

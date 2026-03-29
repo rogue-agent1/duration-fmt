@@ -1,11 +1,17 @@
 # duration_fmt
 
-duration_fmt - Parse and format human-readable durations (1h30m, 2d5h, etc).
+Duration parser and formatter (ISO 8601, human-readable)
+
+Single-file, zero-dependency Python CLI tool.
 
 ## Usage
 
 ```bash
-python3 duration_fmt.py --test
+python duration_fmt.py --help
 ```
 
-Zero dependencies. Python 3.8+.
+## Test
+
+```bash
+python -c "import duration_fmt; duration_fmt.test()"
+```
